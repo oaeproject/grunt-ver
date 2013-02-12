@@ -5,21 +5,22 @@ Licensed under the MIT license.
 
 var fs = require('fs'),
   path = require('path'),
-  crypto = require('crypto');
+  crypto = require('crypto'),
+  util = require('util');
 
 module.exports = function(grunt) {
   grunt.registerMultiTask('ver', 'Add hashes to file names and update references to renamed files', function() {
-    grunt.helper('ver', this.data.phases, this.data.version, this.data.forceVersion);
+    grunt.helper('ver', this.data.phases, this.data.version, this.data.forceVersion, this.data.basedir);
   });
 
   // Expose as a helper for possible consumption by other tasks.
-  grunt.registerHelper('ver', function(phases, versionFilePath, forceVersion) {
+  grunt.registerHelper('ver', function(phases, versionFilePath, forceVersion, basedir) {
     grunt.verbose.or.writeln('Run with --verbose for details.');
     var versions = {},  // map from original file name to version info
       simpleVersions = {};
 
     phases.forEach(function(phase) {
-      var files = phase.files, 
+      var files = phase.files,
         references = phase.references,
         numFilesRenamed = 0;
 
@@ -44,9 +45,10 @@ module.exports = function(grunt) {
           basename: basename,
           version: version,
           renamedBasename: renamedBasename,
-          renamedPath: renamedPath,
+          renamedPath: renamedPath
         };
         simpleVersions[f] = renamedPath;
+
         numFilesRenamed++;
       });
       grunt.log.write('Renamed ' + numFilesRenamed + ' files ').ok();
@@ -61,17 +63,21 @@ module.exports = function(grunt) {
             replacedKeys;
 
           Object.keys(versions).forEach(function(key) {
-            var to = versions[key],
-              regex = new RegExp('\\b' + to.basename + '\\b', 'g');
+            var to = versions[key];
+            var pathObj = _parsePathObj(to, basedir);
 
+            // Replace all instances of paths from the base directory
+            var escapedBase = pathObj.source.replace(/[\-\[\]{}()*+?.,\\\^$|#\s]/g, "\\$&");
+            var regex = new RegExp('\\b' + escapedBase + '\\b', 'g');
             content = content.replace(regex, function(match) {
               if (match in replacedToCount) {
                 replacedToCount[match]++;
               } else {
                 replacedToCount[match] = 1;
               }
-              return to.renamedBasename;
+              return pathObj.dest;
             });
+
           });
 
           replacedKeys = Object.keys(replacedToCount);
@@ -104,5 +110,38 @@ module.exports = function(grunt) {
     hash.update(grunt.file.read(filePath));
     return hash.digest(encoding);
   });
+
+  /**
+   * Parse a version into an object that represents the source and destination of the inline path replacement.
+   */
+  var _parsePathObj = function(version, basedir) {
+
+    // basedir = '/target/optimized/node_modules/oae-core/sharecontent/'
+    basedir = util.format('/%s/', basedir).replace(/\/\//g, '/');
+
+    // relativePath = js/sharecontent.bdc939b6.js
+    var relativePath = version.renamedPath.replace(basedir.slice(1), '');
+
+    // lastPart = sharecontent
+    var lastPart = relativePath.split('/').pop().split('.').slice(0, -2).join('.');
+
+    // sourceNoExt = js/sharecontent
+    var sourceNoExt = null;
+    if (relativePath.indexOf('/') !== -1) {
+      // This was a root file, so no need to force a slash in between, or use the relative path at all
+      sourceNoExt = relativePath.split('/').slice(0, -1).join('/') + '/' + lastPart;
+    } else {
+      sourceNoExt = lastPart;
+    }
+    
+    // sourceWithExt = js/sharecontent.js
+    var sourceWithExt = util.format('%s.%s', sourceNoExt, relativePath.split('.').pop());
+
+    // destWithExt = js/sharecontent.bdc939b6.js
+    var destWithExt = relativePath;
+
+    return {'source': sourceWithExt, 'dest': destWithExt};
+
+  };
 
 };
