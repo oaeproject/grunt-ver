@@ -12,7 +12,7 @@ module.exports = function(grunt) {
   var ver, hash, hashFolder;
 
   grunt.registerMultiTask('ver', 'Add hashes to file names and update references to renamed files', function() {
-    ver(this.data.phases, this.data.version, this.data.forceVersion);
+    ver(this.data.phases, this.data.version, this.data.forceVersion, this.data.basedir);
   });
 
   // TODO: Expose as a helper for possible consumption by other tasks.
