@@ -30,6 +30,7 @@ module.exports = function(grunt) {
       if (folders) {
         grunt.log.writeln('Versioning folders.').writeflags(folders);
         folders.forEach(function(folder) {
+
           if (fs.existsSync(folder)) {
             var version = forceVersion || hashFolder(folder).slice(0, 8);
 
@@ -130,7 +131,27 @@ module.exports = function(grunt) {
 
     if (versionFilePath) {
       grunt.log.writeln('Writing version file.');
-      grunt.file.write(versionFilePath, JSON.stringify(simpleVersions, null, ' '));
+
+      // Before outputting the paths, convert the directories so they are absolute paths using the basedir as the root
+      var fileContent = {};
+      Object.keys(simpleVersions).forEach(function(fullFilePath) {
+
+        // Chop off the basedir from the key (source) path
+        var trimmedFilePath = fullFilePath;
+        if (trimmedFilePath.indexOf(basedir) === 0) {
+          trimmedFilePath = trimmedFilePath.slice(basedir.length);
+        }
+
+        // Chop off the the basedir from the value (target) path
+        var trimmedTargetPath = simpleVersions[fullFilePath];
+        if (trimmedTargetPath.indexOf(basedir) === 0) {
+          trimmedTargetPath = trimmedTargetPath.slice(basedir.length);
+        }
+
+        fileContent[trimmedFilePath] = trimmedTargetPath;
+      });
+
+      grunt.file.write(versionFilePath, JSON.stringify(fileContent, null, ' '));
       grunt.log.write(versionFilePath + ' ').ok();
     }
   };
